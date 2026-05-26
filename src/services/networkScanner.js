@@ -11,7 +11,7 @@ let isScanning = false;
 
 export const scanForBackend = async () => {
   if (isScanning) return null;
-  
+
   if (Platform.OS === 'web') {
     const webUrl = `http://localhost:${PORT}/api`;
     await AsyncStorage.setItem('backend_url', webUrl);
@@ -23,7 +23,7 @@ export const scanForBackend = async () => {
   try {
     let ip = null;
     const netState = await NetInfo.fetch();
-    
+
     if (netState.type === 'wifi' && netState.details && netState.details.ipAddress) {
       ip = netState.details.ipAddress;
     } else {
@@ -63,11 +63,11 @@ export const scanForBackend = async () => {
     }
 
     const pingPromises = [];
-    
+
     for (let i = 1; i <= 254; i++) {
       const targetIp = `${base}.${i}`;
       const targetUrl = `http://${targetIp}:${PORT}`;
-      
+
       const ping = axios.get(targetUrl, { timeout: TIMEOUT })
         .then(response => {
           if (response.data && response.data.message === 'SketchF API is running') {
@@ -78,10 +78,10 @@ export const scanForBackend = async () => {
         .catch(() => {
           throw new Error('Not found');
         });
-        
+
       pingPromises.push(ping);
     }
-    
+
     try {
       const foundUrl = await Promise.any(pingPromises);
       await AsyncStorage.setItem('backend_url', foundUrl);

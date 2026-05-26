@@ -1,14 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  getSyncQueue, removeSyncItem,
-  getProjects, write, setProjects,
-  getItems, setItems, getPhotos, setPhotos
-} from './localDB';
+import { getSyncQueue, removeSyncItem } from './localDB';
 
 const KEYS = {
-  PROJECTS: '@localdb_projects',
-  ITEMS: (projectId) => `@localdb_items_${projectId}`,
-  PHOTOS: (itemId) => `@localdb_photos_${itemId}`,
+  CLIENTS: '@localdb_clients',
+  VISITS: '@localdb_visits',
+  PHOTOS: (visitId) => `@localdb_photos_${visitId}`,
 };
 
 let isSyncing = false;
@@ -31,69 +27,73 @@ export const syncToServer = async (api) => {
       try {
         let success = false;
 
-        if (op.type === 'CREATE' && op.entity === 'project') {
-          const res = await api.post('/projects', op.data);
+        if (op.type === 'CREATE' && op.entity === 'client') {
+          const res = await api.post('/clients', op.data);
           if (res.data?.id) {
             const serverId = res.data.id;
             const localId = op.localId;
             idMap[localId] = serverId;
 
-            const projects = JSON.parse(await AsyncStorage.getItem(KEYS.PROJECTS) || '[]');
-            const updated = projects.filter(p => p.id !== localId);
-            await AsyncStorage.setItem(KEYS.PROJECTS, JSON.stringify(updated));
+            const clients = JSON.parse(await AsyncStorage.getItem(KEYS.CLIENTS) || '[]');
+            const updated = clients.map(c => 
+              c.id === localId ? { ...c, id: serverId, _serverId: serverId, _isLocal: false } : c
+            );
+            await AsyncStorage.setItem(KEYS.CLIENTS, JSON.stringify(updated));
 
-            const oldItemsKey = KEYS.ITEMS(localId);
-            const newItemsKey = KEYS.ITEMS(serverId);
-            const itemsJson = await AsyncStorage.getItem(oldItemsKey);
-            if (itemsJson) {
-              const items = JSON.parse(itemsJson);
-              const updatedItems = items.map(i => ({ ...i, project_id: serverId }));
-              await AsyncStorage.setItem(newItemsKey, JSON.stringify(updatedItems));
-              await AsyncStorage.removeItem(oldItemsKey);
+            const visitsJson = await AsyncStorage.getItem(KEYS.VISITS);
+            if (visitsJson) {
+              const visits = JSON.parse(visitsJson);
+              const updatedVisits = visits.map(v => 
+                v.client_id === localId ? { ...v, client_id: serverId } : v
+              );
+              await AsyncStorage.setItem(KEYS.VISITS, JSON.stringify(updatedVisits));
             }
 
             success = true;
           }
         }
 
-        else if (op.type === 'UPDATE' && op.entity === 'project') {
+        else if (op.type === 'UPDATE' && op.entity === 'client') {
           const serverId = idMap[op.localId] || op.serverId;
           if (serverId) {
-            await api.put(`/projects/${serverId}`, op.data);
+            await api.put(`/clients/${serverId}`, op.data);
             success = true;
           }
         }
 
-        else if (op.type === 'DELETE' && op.entity === 'project') {
+        else if (op.type === 'DELETE' && op.entity === 'client') {
           const serverId = idMap[op.localId] || op.serverId;
           if (serverId) {
-            await api.delete(`/projects/${serverId}`);
+            await api.delete(`/clients/${serverId}`);
             success = true;
           }
         }
 
-        else if (op.type === 'CREATE' && op.entity === 'item') {
-          let projectServerId = idMap[op.projectLocalId] || op.data.project_id;
-          if (typeof projectServerId === 'string' && projectServerId.startsWith('local_')) {
+        else if (op.type === 'CREATE' && op.entity === 'visit') {
+          let clientServerId = idMap[op.clientLocalId] || op.data.client_id;
+          if (typeof clientServerId === 'string' && clientServerId.startsWith('local_')) {
+
             continue;
           }
-          const res = await api.post('/items', { ...op.data, project_id: projectServerId });
+
+          const res = await api.post('/visits', { ...op.data, client_id: clientServerId });
           if (res.data?.id) {
             const serverId = res.data.id;
             const localId = op.localId;
             idMap[localId] = serverId;
 
-            const itemsKey = KEYS.ITEMS(projectServerId);
-            const items = JSON.parse(await AsyncStorage.getItem(itemsKey) || '[]');
-            const updated = items.filter(i => i.id !== localId);
-            await AsyncStorage.setItem(itemsKey, JSON.stringify(updated));
+            const visits = JSON.parse(await AsyncStorage.getItem(KEYS.VISITS) || '[]');
+            const updated = visits.map(v => 
+              v.id === localId ? { ...v, id: serverId, _serverId: serverId, _isLocal: false, client_id: clientServerId } : v
+            );
+            await AsyncStorage.setItem(KEYS.VISITS, JSON.stringify(updated));
 
             const oldPhotosKey = KEYS.PHOTOS(localId);
             const newPhotosKey = KEYS.PHOTOS(serverId);
             const photosJson = await AsyncStorage.getItem(oldPhotosKey);
             if (photosJson) {
               const photos = JSON.parse(photosJson);
-              const updatedPhotos = photos.map(p => ({ ...p, item_id: serverId }));
+              const updatedPhotos = photos.map(p => ({ ...p, visit_id: serverId }));
               await AsyncStorage.setItem(newPhotosKey, JSON.stringify(updatedPhotos));
               await AsyncStorage.removeItem(oldPhotosKey);
             }
@@ -102,44 +102,56 @@ export const syncToServer = async (api) => {
           }
         }
 
-        else if (op.type === 'DELETE' && op.entity === 'item') {
+        else if (op.type === 'UPDATE' && op.entity === 'visit') {
           const serverId = idMap[op.localId] || op.serverId;
           if (serverId) {
-            await api.delete(`/items/${serverId}`);
+            await api.put(`/visits/${serverId}`, op.data);
+            success = true;
+          }
+        }
+
+        else if (op.type === 'DELETE' && op.entity === 'visit') {
+          const serverId = idMap[op.localId] || op.serverId;
+          if (serverId) {
+            await api.delete(`/visits/${serverId}`);
             success = true;
           }
         }
 
         else if (op.type === 'CREATE' && op.entity === 'photo') {
-          let itemServerId = idMap[op.itemLocalId] || op.data.item_id;
-          if (typeof itemServerId === 'string' && itemServerId.startsWith('local_')) {
+          let visitServerId = idMap[op.visitLocalId] || op.data.visit_id;
+          if (typeof visitServerId === 'string' && visitServerId.startsWith('local_')) {
+
             continue;
           }
+
           const formData = new FormData();
           formData.append('photo', {
             uri: op.data.localFileUri,
             type: 'image/jpeg',
             name: 'photo.jpg',
           });
-          formData.append('item_id', itemServerId);
+          formData.append('visit_id', visitServerId);
           if (op.data.markers) formData.append('markers', JSON.stringify(op.data.markers));
-          
+          if (op.data.observations) formData.append('observations', JSON.stringify(op.data.observations));
+
           const res = await api.post('/photos', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
           if (res.data?.id) {
             const serverId = res.data.id;
             const localId = op.localId;
             idMap[localId] = serverId;
 
-            const photosKey = KEYS.PHOTOS(itemServerId);
+            const photosKey = KEYS.PHOTOS(visitServerId);
             const photos = JSON.parse(await AsyncStorage.getItem(photosKey) || '[]');
-            const updated = photos.filter(p => p.id !== localId);
+            const updated = photos.map(p => 
+              p.id === localId ? { ...p, id: serverId, _serverId: serverId, _isLocal: false } : p
+            );
             await AsyncStorage.setItem(photosKey, JSON.stringify(updated));
-            
+
             try {
               const { removeImage } = require('./imageStorage');
               await removeImage(op.data.localFileUri);
-            } catch (err) {
-            }
+            } catch (err) {}
 
             success = true;
           }
@@ -165,6 +177,7 @@ export const syncToServer = async (api) => {
           await removeSyncItem(op.id);
         }
       } catch (error) {
+        console.log('[SyncService] Operation sync error:', error);
       }
     }
   } finally {

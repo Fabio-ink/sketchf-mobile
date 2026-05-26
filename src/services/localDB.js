@@ -1,13 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const MAX_CACHED_PHOTO_ITEMS = 5;
+const MAX_CACHED_PHOTO_ITEMS = 10;
 
 const KEYS = {
-  PROJECTS: '@localdb_projects',
-  ITEMS: (projectId) => `@localdb_items_${projectId}`,
-  PHOTOS: (itemId) => `@localdb_photos_${itemId}`,
+  CLIENTS: '@localdb_clients',
+  VISITS: '@localdb_visits',
+  PHOTOS: (visitId) => `@localdb_photos_${visitId}`,
   SYNC_QUEUE: '@localdb_sync_queue',
-  RECENT_PHOTO_ITEMS: '@localdb_recent_photo_items',
+  RECENT_PHOTO_VISITS: '@localdb_recent_photo_visits',
 };
 
 const generateId = () => `local_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -45,199 +45,244 @@ export const clearSyncQueue = async () => {
   await write(KEYS.SYNC_QUEUE, []);
 };
 
-export const getProjects = async () => {
-  return (await read(KEYS.PROJECTS)) || [];
+export const getClients = async () => {
+  return (await read(KEYS.CLIENTS)) || [];
 };
 
-export const setProjects = async (projects) => {
-  await write(KEYS.PROJECTS, projects);
+export const setClients = async (clients) => {
+  await write(KEYS.CLIENTS, clients);
 };
 
-export const createProject = async (data, skipSync = false) => {
-  const projects = await getProjects();
-  const newProject = {
+export const createClient = async (data, skipSync = false) => {
+  const clients = await getClients();
+  const newClient = {
     id: generateId(),
     name: data.name,
-    client_name: data.client_name || '',
+    phone: data.phone || '',
     address: data.address || '',
-    items_count: 0,
+    visits_count: 0,
     _isLocal: true,
     created_at: new Date().toISOString(),
   };
-  projects.unshift(newProject);
-  await write(KEYS.PROJECTS, projects);
+  clients.unshift(newClient);
+  await write(KEYS.CLIENTS, clients);
   if (!skipSync) {
-    await addToSyncQueue({ type: 'CREATE', entity: 'project', localId: newProject.id, data });
+    await addToSyncQueue({ type: 'CREATE', entity: 'client', localId: newClient.id, data });
   }
-  return newProject;
+  return newClient;
 };
 
-export const updateProject = async (id, data) => {
-  const projects = await getProjects();
-  const exists = projects.some(p => p.id === id || p.id.toString() === id.toString());
-  let project;
-  
+export const updateClient = async (id, data) => {
+  const clients = await getClients();
+  const exists = clients.some(c => c.id === id || c.id.toString() === id.toString());
+  let client;
+
   if (exists) {
-    const updated = projects.map(p => p.id === id || p.id.toString() === id.toString()
-      ? { ...p, ...data }
-      : p
+    const updated = clients.map(c => c.id === id || c.id.toString() === id.toString()
+      ? { ...c, ...data }
+      : c
     );
-    await write(KEYS.PROJECTS, updated);
-    project = updated.find(p => p.id === id || p.id.toString() === id.toString());
+    await write(KEYS.CLIENTS, updated);
+    client = updated.find(c => c.id === id || c.id.toString() === id.toString());
   } else {
-    project = { id, ...data, _serverId: id };
+    client = { id, ...data, _serverId: id };
   }
-  
-  const serverId = project?._serverId || (String(id).startsWith('local_') ? null : id);
-  await addToSyncQueue({ type: 'UPDATE', entity: 'project', localId: id, serverId, data });
-  return project;
+
+  const serverId = client?._serverId || (String(id).startsWith('local_') ? null : id);
+  await addToSyncQueue({ type: 'UPDATE', entity: 'client', localId: id, serverId, data });
+  return client;
 };
 
-export const deleteProject = async (id) => {
-  const projects = await getProjects();
-  const project = projects.find(p => p.id === id || p.id.toString() === id.toString());
-  await write(KEYS.PROJECTS, projects.filter(p => p.id !== id && p.id.toString() !== id.toString()));
-  if (project?._serverId) {
-    await addToSyncQueue({ type: 'DELETE', entity: 'project', localId: id, serverId: project._serverId });
+export const deleteClient = async (id) => {
+  const clients = await getClients();
+  const client = clients.find(c => c.id === id || c.id.toString() === id.toString());
+  await write(KEYS.CLIENTS, clients.filter(c => c.id !== id && c.id.toString() !== id.toString()));
+  if (client?._serverId) {
+    await addToSyncQueue({ type: 'DELETE', entity: 'client', localId: id, serverId: client._serverId });
+  }
+
+  const visits = await getVisits();
+  const visitsToDelete = visits.filter(v => v.client_id === id || v.client_id.toString() === id.toString());
+  for (const visit of visitsToDelete) {
+    await deleteVisit(visit.id);
   }
 };
 
-export const getItems = async (projectId) => {
-  return (await read(KEYS.ITEMS(projectId))) || [];
+export const getVisits = async () => {
+  return (await read(KEYS.VISITS)) || [];
 };
 
-export const setItems = async (projectId, items) => {
-  await write(KEYS.ITEMS(projectId), items);
+export const setVisits = async (visits) => {
+  await write(KEYS.VISITS, visits);
 };
 
-export const createItem = async (projectId, data, skipSync = false) => {
-  const items = await getItems(projectId);
-  const newItem = {
+export const createVisit = async (data, skipSync = false) => {
+  const visits = await getVisits();
+  const newVisit = {
     id: generateId(),
-    name: data.name,
-    project_id: projectId,
+    client_id: data.client_id,
+    client_name: data.client_name || '',
+    client_phone: data.client_phone || '',
+    client_address: data.client_address || '',
+    environment: data.environment,
+    status: data.status || 'Em andamento',
+    date: data.date || new Date().toISOString(),
+    observations: data.observations || '',
     photos_count: 0,
     _isLocal: true,
     created_at: new Date().toISOString(),
   };
-  items.unshift(newItem);
-  await write(KEYS.ITEMS(projectId), items);
+  visits.unshift(newVisit);
+  await write(KEYS.VISITS, visits);
+
   if (!skipSync) {
-    await addToSyncQueue({ type: 'CREATE', entity: 'item', localId: newItem.id, projectLocalId: projectId, data: { ...data, project_id: projectId } });
+    await addToSyncQueue({ 
+      type: 'CREATE', 
+      entity: 'visit', 
+      localId: newVisit.id, 
+      clientLocalId: data.client_id, 
+      data: { 
+        client_id: data.client_id, 
+        environment: data.environment, 
+        status: newVisit.status, 
+        date: newVisit.date, 
+        observations: newVisit.observations 
+      } 
+    });
   }
-  const projects = await getProjects();
-  await write(KEYS.PROJECTS, projects.map(p =>
-    p.id === projectId || p.id.toString() === projectId.toString()
-      ? { ...p, items_count: (p.items_count || 0) + 1 }
-      : p
+
+  const clients = await getClients();
+  await write(KEYS.CLIENTS, clients.map(c =>
+    c.id === data.client_id || c.id.toString() === data.client_id.toString()
+      ? { ...c, visits_count: (c.visits_count || 0) + 1 }
+      : c
   ));
-  return newItem;
+
+  return newVisit;
 };
 
-export const updateItem = async (projectId, itemId, data) => {
-  const items = await getItems(projectId);
-  const exists = items.some(i => i.id === itemId || i.id.toString() === itemId.toString());
-  let item;
-  
+export const updateVisit = async (id, data) => {
+  const visits = await getVisits();
+  const exists = visits.some(v => v.id === id || v.id.toString() === id.toString());
+  let visit;
+
   if (exists) {
-    const updated = items.map(i => i.id === itemId || i.id.toString() === itemId.toString()
-      ? { ...i, ...data }
-      : i
+    const updated = visits.map(v => v.id === id || v.id.toString() === id.toString()
+      ? { ...v, ...data }
+      : v
     );
-    await write(KEYS.ITEMS(projectId), updated);
-    item = updated.find(i => i.id === itemId || i.id.toString() === itemId.toString());
+    await write(KEYS.VISITS, updated);
+    visit = updated.find(v => v.id === id || v.id.toString() === id.toString());
   } else {
-    item = { id: itemId, project_id: projectId, ...data, _serverId: itemId };
+    visit = { id, ...data, _serverId: id };
   }
-  
-  const serverId = item?._serverId || (String(itemId).startsWith('local_') ? null : itemId);
-  await addToSyncQueue({ type: 'UPDATE', entity: 'item', localId: itemId, serverId, data });
-  return item;
+
+  const serverId = visit?._serverId || (String(id).startsWith('local_') ? null : id);
+  await addToSyncQueue({ type: 'UPDATE', entity: 'visit', localId: id, serverId, data });
+  return visit;
 };
 
-export const deleteItem = async (projectId, itemId) => {
-  const items = await getItems(projectId);
-  const item = items.find(i => i.id === itemId || i.id.toString() === itemId.toString());
-  await write(KEYS.ITEMS(projectId), items.filter(i => i.id !== itemId && i.id.toString() !== itemId.toString()));
-  if (item?._serverId) {
-    await addToSyncQueue({ type: 'DELETE', entity: 'item', localId: itemId, serverId: item._serverId });
+export const deleteVisit = async (id) => {
+  const visits = await getVisits();
+  const visit = visits.find(v => v.id === id || v.id.toString() === id.toString());
+  await write(KEYS.VISITS, visits.filter(v => v.id !== id && v.id.toString() !== id.toString()));
+
+  if (visit?._serverId) {
+    await addToSyncQueue({ type: 'DELETE', entity: 'visit', localId: id, serverId: visit._serverId });
   }
-  const projects = await getProjects();
-  await write(KEYS.PROJECTS, projects.map(p =>
-    p.id === projectId || p.id.toString() === projectId.toString()
-      ? { ...p, items_count: Math.max(0, (p.items_count || 1) - 1) }
-      : p
-  ));
+
+  if (visit) {
+    const clients = await getClients();
+    await write(KEYS.CLIENTS, clients.map(c =>
+      c.id === visit.client_id || c.id.toString() === visit.client_id.toString()
+        ? { ...c, visits_count: Math.max(0, (c.visits_count || 1) - 1) }
+        : c
+    ));
+  }
+
+  await AsyncStorage.removeItem(KEYS.PHOTOS(id));
 };
 
-export const getPhotos = async (itemId) => {
-  return (await read(KEYS.PHOTOS(itemId))) || [];
+export const getPhotos = async (visitId) => {
+  return (await read(KEYS.PHOTOS(visitId))) || [];
 };
 
-export const setPhotos = async (itemId, photos) => {
-  await write(KEYS.PHOTOS(itemId), photos);
+export const setPhotos = async (visitId, photos) => {
+  await write(KEYS.PHOTOS(visitId), photos);
 };
 
-export const createPhoto = async (itemId, data, skipSync = false) => {
-  const photos = await getPhotos(itemId);
+export const createPhoto = async (visitId, data, skipSync = false) => {
+  const photos = await getPhotos(visitId);
   const newPhoto = {
     id: generateId(),
-    item_id: itemId,
+    visit_id: visitId,
     image_url: data.localFileUri,
     markers: data.markers || [],
+    observations: data.observations || [],
     _isLocal: true,
     _localFileUri: data.localFileUri,
     created_at: new Date().toISOString(),
   };
   photos.unshift(newPhoto);
-  await write(KEYS.PHOTOS(itemId), photos);
+  await write(KEYS.PHOTOS(visitId), photos);
+
   if (!skipSync) {
     await addToSyncQueue({
-      type: 'CREATE', entity: 'photo', localId: newPhoto.id, itemLocalId: itemId,
-      data: { localFileUri: data.localFileUri, markers: data.markers, item_id: itemId }
+      type: 'CREATE', 
+      entity: 'photo', 
+      localId: newPhoto.id, 
+      visitLocalId: visitId,
+      data: { localFileUri: data.localFileUri, markers: data.markers, observations: data.observations, visit_id: visitId }
     });
   }
-  const projects = await getProjects();
-  for (const proj of projects) {
-    const items = await getItems(proj.id);
-    const updated = items.map(i =>
-      i.id === itemId || i.id.toString() === itemId.toString()
-        ? { ...i, photos_count: (i.photos_count || 0) + 1 }
-        : i
-    );
-    if (JSON.stringify(items) !== JSON.stringify(updated)) {
-      await write(KEYS.ITEMS(proj.id), updated);
-    }
-  }
+
+  const visits = await getVisits();
+  await write(KEYS.VISITS, visits.map(v =>
+    v.id === visitId || v.id.toString() === visitId.toString()
+      ? { ...v, photos_count: (v.photos_count || 0) + 1 }
+      : v
+  ));
+
   return newPhoto;
 };
 
-export const deletePhoto = async (itemId, photoId) => {
-  const photos = await getPhotos(itemId);
+export const deletePhoto = async (visitId, photoId) => {
+  const photos = await getPhotos(visitId);
   const photo = photos.find(p => p.id === photoId || p.id.toString() === photoId.toString());
-  await write(KEYS.PHOTOS(itemId), photos.filter(p => p.id !== photoId && p.id.toString() !== photoId.toString()));
+  await write(KEYS.PHOTOS(visitId), photos.filter(p => p.id !== photoId && p.id.toString() !== photoId.toString()));
+
   if (photo?._serverId) {
     await addToSyncQueue({ type: 'DELETE', entity: 'photo', localId: photoId, serverId: photo._serverId });
   }
+
+  const visits = await getVisits();
+  await write(KEYS.VISITS, visits.map(v =>
+    v.id === visitId || v.id.toString() === visitId.toString()
+      ? { ...v, photos_count: Math.max(0, (v.photos_count || 1) - 1) }
+      : v
+  ));
 };
 
-export const updatePhotoMarkers = async (itemId, photoId, markers) => {
-  const photos = await getPhotos(itemId);
+export const updatePhotoMarkers = async (visitId, photoId, markers, observations) => {
+  const photos = await getPhotos(visitId);
   const exists = photos.some(p => p.id === photoId || p.id.toString() === photoId.toString());
   let photo;
   let updatedPhotos = photos;
-  
+
   if (exists) {
     updatedPhotos = photos.map(p => {
       if (p.id === photoId || p.id.toString() === photoId.toString()) {
-        return { ...p, markers };
+        const updateData = {};
+        if (markers !== undefined) updateData.markers = markers;
+        if (observations !== undefined) updateData.observations = observations;
+        return { ...p, ...updateData };
       }
       return p;
     });
-    await write(KEYS.PHOTOS(itemId), updatedPhotos);
+    await write(KEYS.PHOTOS(visitId), updatedPhotos);
     photo = updatedPhotos.find(p => p.id === photoId || p.id.toString() === photoId.toString());
   } else {
-    photo = { id: photoId, item_id: itemId, markers, _serverId: photoId };
+    photo = { id: photoId, visit_id: visitId, markers: markers || [], observations: observations || [], _serverId: photoId };
   }
 
   if (!photo) return null;
@@ -245,23 +290,27 @@ export const updatePhotoMarkers = async (itemId, photoId, markers) => {
   const serverId = photo?._serverId || (String(photoId).startsWith('local_') ? null : photoId);
 
   if (serverId) {
+    const updatePayload = {};
+    if (markers !== undefined) updatePayload.markers = markers;
+    if (observations !== undefined) updatePayload.observations = observations;
+
     await addToSyncQueue({
       type: 'UPDATE',
       entity: 'photo',
       localId: photoId,
       serverId,
-      data: { markers }
+      data: updatePayload
     });
   } else {
     const queue = (await read(KEYS.SYNC_QUEUE)) || [];
     const updatedQueue = queue.map(op => {
       if (op.type === 'CREATE' && op.entity === 'photo' && (op.localId === photoId || op.localId.toString() === photoId.toString())) {
+        const updatedData = { ...op.data };
+        if (markers !== undefined) updatedData.markers = markers;
+        if (observations !== undefined) updatedData.observations = observations;
         return {
           ...op,
-          data: {
-            ...op.data,
-            markers
-          }
+          data: updatedData
         };
       }
       return op;
@@ -272,10 +321,10 @@ export const updatePhotoMarkers = async (itemId, photoId, markers) => {
   return photo;
 };
 
-const trackPhotoCacheItem = async (itemId) => {
+const trackPhotoCacheItem = async (visitId) => {
   try {
-    const id = itemId.toString();
-    const raw = await AsyncStorage.getItem(KEYS.RECENT_PHOTO_ITEMS);
+    const id = visitId.toString();
+    const raw = await AsyncStorage.getItem(KEYS.RECENT_PHOTO_VISITS);
     let recent = raw ? JSON.parse(raw) : [];
 
     recent = [id, ...recent.filter(r => r !== id)];
@@ -283,7 +332,7 @@ const trackPhotoCacheItem = async (itemId) => {
     const toEvict = recent.slice(MAX_CACHED_PHOTO_ITEMS);
     recent = recent.slice(0, MAX_CACHED_PHOTO_ITEMS);
 
-    await AsyncStorage.setItem(KEYS.RECENT_PHOTO_ITEMS, JSON.stringify(recent));
+    await AsyncStorage.setItem(KEYS.RECENT_PHOTO_VISITS, JSON.stringify(recent));
 
     for (const evictedId of toEvict) {
       const photosKey = KEYS.PHOTOS(evictedId);
@@ -302,26 +351,34 @@ const trackPhotoCacheItem = async (itemId) => {
   }
 };
 
-export const mergeServerProjects = async (serverProjects) => {
-  const localProjects = await getProjects();
-  const localOnlyItems = localProjects.filter(p => p._isLocal);
-  const serverMapped = serverProjects.map(sp => ({ ...sp, _serverId: sp.id, _isLocal: false }));
-  const merged = [...localOnlyItems, ...serverMapped];
-  await write(KEYS.PROJECTS, merged);
+export const mergeServerClients = async (serverClients) => {
+  const localClients = await getClients();
+  const localOnly = localClients.filter(c => c._isLocal);
+  const serverMapped = serverClients.map(sc => ({ ...sc, _serverId: sc.id, _isLocal: false }));
+  const merged = [...localOnly, ...serverMapped];
+  await write(KEYS.CLIENTS, merged);
   return merged;
 };
 
-export const mergeServerItems = async (projectId, serverItems) => {
-  const localItems = await getItems(projectId);
-  const localOnlyItems = localItems.filter(i => i._isLocal);
-  const serverMapped = serverItems.map(si => ({ ...si, _serverId: si.id, _isLocal: false }));
-  const merged = [...localOnlyItems, ...serverMapped];
-  await write(KEYS.ITEMS(projectId), merged);
+export const mergeServerVisits = async (serverVisits) => {
+  const localVisits = await getVisits();
+  const localOnly = localVisits.filter(v => v._isLocal);
+  const serverMapped = serverVisits.map(sv => ({ 
+    ...sv, 
+    _serverId: sv.id, 
+    _isLocal: false,
+    client_id: sv.client_id,
+    client_name: sv.client_name,
+    client_phone: sv.client_phone,
+    client_address: sv.client_address
+  }));
+  const merged = [...localOnly, ...serverMapped];
+  await write(KEYS.VISITS, merged);
   return merged;
 };
 
-export const mergeServerPhotos = async (itemId, serverPhotos) => {
-  const localPhotos = await getPhotos(itemId);
+export const mergeServerPhotos = async (visitId, serverPhotos) => {
+  const localPhotos = await getPhotos(visitId);
   const queue = await getSyncQueue();
   const pendingUpdates = queue
     .filter(op => op.entity === 'photo' && op.type === 'UPDATE')
@@ -332,14 +389,20 @@ export const mergeServerPhotos = async (itemId, serverPhotos) => {
   const serverMapped = serverPhotos.map(sp => {
     const localPhoto = localPhotos.find(p => p.id.toString() === sp.id.toString());
     if (localPhoto && pendingUpdates.includes(sp.id.toString())) {
-      return { ...sp, _serverId: sp.id, markers: localPhoto.markers, _isLocal: false };
+      return { 
+        ...sp, 
+        _serverId: sp.id, 
+        markers: localPhoto.markers, 
+        observations: localPhoto.observations, 
+        _isLocal: false 
+      };
     }
     return { ...sp, _serverId: sp.id, _isLocal: false };
   });
 
   const merged = [...localOnlyPhotos, ...serverMapped];
 
-  await trackPhotoCacheItem(itemId);
-  await write(KEYS.PHOTOS(itemId), merged);
+  await trackPhotoCacheItem(visitId);
+  await write(KEYS.PHOTOS(visitId), merged);
   return merged;
 };
