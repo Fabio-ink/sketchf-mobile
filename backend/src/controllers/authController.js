@@ -34,8 +34,11 @@ exports.login = async (req, res) => {
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
       return res.status(401).send({ error: 'Login failed' });
     }
+    if (user.active !== 'A') {
+      return res.status(403).send({ error: 'User account is inactive' });
+    }
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET);
-    res.send({ user: { id: user.id, email: user.email }, token });
+    res.send({ user: { id: user.id, email: user.email, active: user.active }, token });
   } catch (error) {
     res.status(500).send(error);
   }

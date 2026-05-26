@@ -8,37 +8,38 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Routes
 app.use('/api/auth', require('./src/routes/authRoutes'));
 
-const projectRoutes = express.Router();
-const projectController = require('./src/controllers/projectController');
+const clientRoutes = express.Router();
+const clientController = require('./src/controllers/clientController');
 const auth = require('./src/middleware/auth');
 
-projectRoutes.get('/', auth, projectController.getProjects);
-projectRoutes.post('/', auth, projectController.createProject);
-projectRoutes.put('/:id', auth, projectController.updateProject);
-projectRoutes.delete('/:id', auth, projectController.deleteProject);
-app.use('/api/projects', projectRoutes);
+clientRoutes.get('/', auth, clientController.getClients);
+clientRoutes.post('/', auth, clientController.createClient);
+clientRoutes.put('/:id', auth, clientController.updateClient);
+clientRoutes.delete('/:id', auth, clientController.deleteClient);
+app.use('/api/clients', clientRoutes);
 
-const itemRoutes = express.Router();
-const itemController = require('./src/controllers/itemController');
-const upload = require('./src/middleware/upload');
+const visitRoutes = express.Router();
+const visitController = require('./src/controllers/visitController');
 
-itemRoutes.get('/:projectId', auth, itemController.getItemsByProject);
-itemRoutes.post('/', auth, itemController.createItem);
-itemRoutes.delete('/:itemId', auth, itemController.deleteItem);
-itemRoutes.put('/:itemId/move', auth, itemController.moveItem);
-app.use('/api/items', itemRoutes);
+visitRoutes.get('/', auth, visitController.getVisits);
+visitRoutes.get('/client/:clientId', auth, visitController.getVisitsByClient);
+visitRoutes.post('/', auth, visitController.createVisit);
+visitRoutes.put('/:id', auth, visitController.updateVisit);
+visitRoutes.delete('/:id', auth, visitController.deleteVisit);
+app.use('/api/visits', visitRoutes);
 
 const photoRoutes = express.Router();
-photoRoutes.get('/item/:itemId', auth, itemController.getPhotosByItem);
-photoRoutes.post('/', auth, upload.single('photo'), itemController.createPhoto);
-photoRoutes.put('/:photoId', auth, itemController.updatePhoto);
-photoRoutes.delete('/:photoId', auth, itemController.deletePhoto);
+const photoController = require('./src/controllers/photoController');
+const upload = require('./src/middleware/upload');
+
+photoRoutes.get('/visit/:visitId', auth, photoController.getPhotosByVisit);
+photoRoutes.post('/', auth, upload.single('photo'), photoController.createPhoto);
+photoRoutes.put('/:photoId', auth, photoController.updatePhoto);
+photoRoutes.delete('/:photoId', auth, photoController.deletePhoto);
 app.use('/api/photos', photoRoutes);
 
-// Basic health check
 app.get('/api/wake', async (req, res) => {
   try {
     const db = require('./db');
