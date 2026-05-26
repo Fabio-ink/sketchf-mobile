@@ -1,10 +1,10 @@
-import 'react-native-gesture-handler';
 import React, { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StatusBar, Platform } from 'react-native';
+import { StatusBar, Platform, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { Provider as PaperProvider } from 'react-native-paper';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Provider as PaperProvider, IconButton } from 'react-native-paper';
 import NetInfo from '@react-native-community/netinfo';
 import { theme } from './src/theme/theme';
 
@@ -14,13 +14,102 @@ import api from './src/services/api';
 import * as NavigationBar from 'expo-navigation-bar';
 
 import LoginScreen from './src/screens/LoginScreen';
-import ProjectListScreen from './src/screens/ProjectListScreen';
-import ProjectDetailsScreen from './src/screens/ProjectDetailsScreen';
-import FolderDetailsScreen from './src/screens/FolderDetailsScreen';
+import DashboardScreen from './src/screens/DashboardScreen';
+import VisitsScreen from './src/screens/VisitsScreen';
+import ClientsScreen from './src/screens/ClientsScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import ClientDetailsScreen from './src/screens/ClientDetailsScreen';
+import NewVisitScreen from './src/screens/NewVisitScreen';
 import MeasurementScreen from './src/screens/MeasurementScreen';
-import AddProjectScreen from './src/screens/AddProjectScreen';
+import PhotoObservationsScreen from './src/screens/PhotoObservationsScreen';
+import VisitDetailsScreen from './src/screens/VisitDetailsScreen';
+import ExportReportScreen from './src/screens/ExportReportScreen';
 
 const Stack = createStackNavigator();
+const Tab = createBottomTabNavigator();
+
+function MainTabNavigator() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName;
+          if (route.name === 'Inicio') {
+            iconName = focused ? 'home' : 'home-outline';
+          } else if (route.name === 'VisitasTab') {
+            iconName = focused ? 'calendar-check' : 'calendar-check-outline';
+          } else if (route.name === 'ClientesTab') {
+            iconName = focused ? 'account-group' : 'account-group-outline';
+          } else if (route.name === 'MaisTab') {
+            iconName = focused ? 'dots-horizontal' : 'dots-horizontal';
+          }
+          return <IconButton icon={iconName} size={focused ? size + 2 : size} iconColor={color} style={{ margin: 0 }} />;
+        },
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.placeholder,
+        tabBarStyle: {
+          backgroundColor: theme.colors.surface,
+          borderTopWidth: 1,
+          borderTopColor: theme.colors.border,
+          height: 64,
+          paddingBottom: 8,
+          paddingTop: 4,
+          elevation: 8,
+          shadowOpacity: 0.1,
+          shadowOffset: { width: 0, height: -2 },
+          shadowRadius: 4,
+        },
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '700',
+        },
+        headerShown: false,
+      })}
+    >
+      <Tab.Screen 
+        name="Inicio" 
+        component={DashboardScreen} 
+        options={{ tabBarLabel: 'Início' }} 
+      />
+      <Tab.Screen 
+        name="VisitasTab" 
+        component={VisitsScreen} 
+        options={{ tabBarLabel: 'Visitas' }} 
+      />
+      <Tab.Screen 
+        name="NewVisitDummy" 
+        component={View}
+        options={{
+          tabBarLabel: '',
+          tabBarIcon: () => (
+            <IconButton 
+              icon="plus-circle" 
+              iconColor={theme.colors.primary} 
+              size={54} 
+              style={{ marginTop: -24 }} 
+            />
+          ),
+        }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate('NewVisitFlow');
+          },
+        })}
+      />
+      <Tab.Screen 
+        name="ClientesTab" 
+        component={ClientsScreen} 
+        options={{ tabBarLabel: 'Clientes' }} 
+      />
+      <Tab.Screen 
+        name="MaisTab" 
+        component={SettingsScreen} 
+        options={{ tabBarLabel: 'Mais' }} 
+      />
+    </Tab.Navigator>
+  );
+}
 
 export default function App() {
   useEffect(() => {
@@ -95,18 +184,18 @@ export default function App() {
           />
           <Stack.Screen 
             name="Projects" 
-            component={ProjectListScreen} 
-            options={{ title: 'Meus Projetos' }} 
+            component={MainTabNavigator} 
+            options={{ headerShown: false }} 
           />
           <Stack.Screen 
-            name="ProjectDetails" 
-            component={ProjectDetailsScreen} 
-            options={{ title: 'Pastas do Projeto' }} 
+            name="ClientDetails" 
+            component={ClientDetailsScreen} 
+            options={{ headerShown: false }} 
           />
           <Stack.Screen 
-            name="FolderDetails" 
-            component={FolderDetailsScreen} 
-            options={{ title: 'Fotos' }} 
+            name="NewVisitFlow" 
+            component={NewVisitScreen} 
+            options={{ headerShown: false }} 
           />
           <Stack.Screen 
             name="Measurement" 
@@ -114,9 +203,19 @@ export default function App() {
             options={{ headerShown: false }} 
           />
           <Stack.Screen 
-            name="AddProject" 
-            component={AddProjectScreen} 
-            options={{ title: 'Novo Projeto' }} 
+            name="PhotoObservations" 
+            component={PhotoObservationsScreen} 
+            options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="VisitDetails" 
+            component={VisitDetailsScreen} 
+            options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="ExportReport" 
+            component={ExportReportScreen} 
+            options={{ headerShown: false }} 
           />
         </Stack.Navigator>
         </NavigationContainer>

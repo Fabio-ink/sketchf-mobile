@@ -42,7 +42,7 @@ export default function LoginScreen({ navigation }) {
     try {
       const endpoint = isRegistering ? '/auth/register' : '/auth/login';
       const response = await api.post(endpoint, { email, password });
-      
+
       const { token } = response.data;
       if (token) {
         await AsyncStorage.setItem('token', token);
