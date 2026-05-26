@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, Dimensions, useWindowDimensions } from 'react-native';
-import { Text, FAB, Portal, Modal, TextInput, Button, IconButton } from 'react-native-paper';
+import { View, StyleSheet, TouchableOpacity, Image, Dimensions, useWindowDimensions, Alert } from 'react-native';
+import { Text, FAB, Portal, Modal, Button, IconButton, TextInput } from 'react-native-paper';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -9,11 +9,11 @@ import { theme, tokens } from '../theme/theme';
 import api from '../services/api';
 import { saveAndCompressImage, removeImage } from '../services/imageStorage';
 import * as localDB from '../services/localDB';
+import NetInfo from '@react-native-community/netinfo';
 
 export default function MeasurementScreen({ route, navigation }) {
   const params = route.params || {};
-  const itemId = params.itemId || 1;
-  const projectId = params.projectId || 1;
+  const visitId = params.visitId || params.itemId || 'temp';
   const photoUri = params.photoUri || null;
   const existingMarkers = params.existingMarkers || [];
   const initialPhotoId = params.photoId || null;
@@ -23,8 +23,9 @@ export default function MeasurementScreen({ route, navigation }) {
   const [photo, setPhoto] = useState(photoUri);
   const [markers, setMarkers] = useState(existingMarkers);
   const [photoId, setPhotoId] = useState(initialPhotoId);
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(1); 
   const [tempPointA, setTempPointA] = useState(null);
+
   const [modalVisible, setModalVisible] = useState(false);
   const [currentValue, setCurrentValue] = useState('');
   const [lastTap, setLastTap] = useState(null);
@@ -34,6 +35,7 @@ export default function MeasurementScreen({ route, navigation }) {
   const [editingMarkerId, setEditingMarkerId] = useState(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editValue, setEditValue] = useState('');
+
   const [isSaving, setIsSaving] = useState(false);
 
   const { width, height } = useWindowDimensions();
@@ -42,20 +44,9 @@ export default function MeasurementScreen({ route, navigation }) {
   let containerWidth = width;
   let containerHeight = height;
 
-  if (photo && aspectRatio) {
-    const availableWidth = isLandscape ? (width - 160) : width;
-    const availableHeight = isLandscape ? height : (height - (insets.bottom + 140));
-
-    const imageRatio = aspectRatio;
-    const screenRatio = availableWidth / availableHeight;
-
-    if (imageRatio > screenRatio) {
-      containerWidth = availableWidth;
-      containerHeight = availableWidth / imageRatio;
-    } else {
-      containerHeight = availableHeight;
-      containerWidth = availableHeight * imageRatio;
-    }
+  if (photo) {
+    containerWidth = width;
+    containerHeight = isLandscape ? height : (height - (insets.bottom + 140));
   }
 
   useEffect(() => {
@@ -101,9 +92,9 @@ export default function MeasurementScreen({ route, navigation }) {
   if (!permission) return <View />;
   if (!permission.granted) {
     return (
-      <View style={styles.container}>
-        <Text style={{ textAlign: 'center' }}>Precisamos de acesso à câmera</Text>
-        <Button onPress={requestPermission}>Permitir</Button>
+      <View style={[styles.container, styles.centered]}>
+        <Text style={{ textAlign: 'center', color: 'white', marginBottom: 12 }}>Precisamos de acesso à câmera</Text>
+        <Button mode="contained" onPress={requestPermission}>Permitir Acesso</Button>
       </View>
     );
   }
@@ -113,13 +104,13 @@ export default function MeasurementScreen({ route, navigation }) {
       try {
         const data = await cameraRef.current.takePictureAsync({ exif: true });
         let finalUri = data.uri;
-        
+
         const exifOri = data.exif?.Orientation || data.exif?.orientation;
         const orientation = exifOri ? parseInt(exifOri, 10) : 1;
         const isPhysicallyPortrait = data.width < data.height;
-        
+
         const isTargetLandscape = (orientation === 6 || orientation === 8 || orientation === 3) || (orientation === 1 && isLandscape);
-        
+
         let rotation = 0;
         if (isTargetLandscape) {
           if (isPhysicallyPortrait) {
@@ -134,7 +125,7 @@ export default function MeasurementScreen({ route, navigation }) {
             rotation = 90;
           }
         }
-        
+
         if (isTargetLandscape) {
           await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
           setAspectRatio(16 / 9);
@@ -142,7 +133,7 @@ export default function MeasurementScreen({ route, navigation }) {
           await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
           setAspectRatio(9 / 16);
         }
-        
+
         if (rotation !== 0) {
           const manipResult = await ImageManipulator.manipulateAsync(
             data.uri,
@@ -151,7 +142,7 @@ export default function MeasurementScreen({ route, navigation }) {
           );
           finalUri = manipResult.uri;
         }
-        
+
         setPhoto(finalUri);
       } catch (error) {
         try {
@@ -166,24 +157,28 @@ export default function MeasurementScreen({ route, navigation }) {
 
   const handleImageTap = (event) => {
     const { locationX, locationY } = event.nativeEvent;
-    
+
     if (step === 1) {
       setTempPointA({ x: locationX, y: locationY });
       setStep(2);
     } else if (step === 2) {
       setLastTap({ x: locationX, y: locationY });
+      setCurrentValue('');
       setModalVisible(true);
     }
   };
 
   const addMarker = () => {
-    if (tempPointA && lastTap && currentValue) {
+    if (tempPointA && lastTap && currentValue.trim()) {
       setMarkers([...markers, { 
         start: tempPointA, 
         end: { x: lastTap.x, y: lastTap.y }, 
-        value: currentValue, 
-        id: Date.now().toString() 
+        value: currentValue.trim(), 
+        id: Date.now().toString(),
+        canvasWidth: containerWidth,
+        canvasHeight: containerHeight
       }]);
+
       setCurrentValue('');
       setTempPointA(null);
       setLastTap(null);
@@ -221,7 +216,7 @@ export default function MeasurementScreen({ route, navigation }) {
   const saveEditedMarker = () => {
     if (editingMarkerId && editValue.trim()) {
       setMarkers(prevMarkers => prevMarkers.map(m => 
-        m.id === editingMarkerId ? { ...m, value: editValue } : m
+        m.id === editingMarkerId ? { ...m, value: editValue.trim() } : m
       ));
       setEditModalVisible(false);
       setEditingMarkerId(null);
@@ -244,27 +239,34 @@ export default function MeasurementScreen({ route, navigation }) {
     setEditValue('');
   };
 
-  const renderLine = (start, end, value, id) => {
-    const dx = end.x - start.x;
-    const dy = end.y - start.y;
+  const renderLine = (start, end, value, id, canvasWidth, canvasHeight) => {
+    const scaleX = (canvasWidth && containerWidth) ? (containerWidth / canvasWidth) : 1;
+    const scaleY = (canvasHeight && containerHeight) ? (containerHeight / canvasHeight) : 1;
+
+    const scaledStart = { x: start.x * scaleX, y: start.y * scaleY };
+    const scaledEnd = { x: end.x * scaleX, y: end.y * scaleY };
+
+    const dx = scaledEnd.x - scaledStart.x;
+    const dy = scaledEnd.y - scaledStart.y;
     const length = Math.sqrt(dx * dx + dy * dy);
     const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-    const centerX = (start.x + end.x) / 2;
-    const centerY = (start.y + end.y) / 2;
+    const centerX = (scaledStart.x + scaledEnd.x) / 2;
+    const centerY = (scaledStart.y + scaledEnd.y) / 2;
 
     return (
       <React.Fragment key={id}>
         <View 
+          pointerEvents="none"
           style={{ 
             position: 'absolute', width: length, height: 3, 
-            backgroundColor: theme.colors.accent, 
+            backgroundColor: '#00E676', 
             left: centerX - length / 2, top: centerY - 1.5, 
             transform: [{ rotate: `${angle}deg` }] 
           }} 
         />
-        <View style={[styles.point, { left: start.x - 6, top: start.y - 6 }]} />
-        <View style={[styles.point, { left: end.x - 6, top: end.y - 6 }]} />
-        
+        <View pointerEvents="none" style={[styles.point, { left: scaledStart.x - 6, top: scaledStart.y - 6 }]} />
+        <View pointerEvents="none" style={[styles.point, { left: scaledEnd.x - 6, top: scaledEnd.y - 6 }]} />
+
         {value ? (
           <TouchableOpacity 
             activeOpacity={0.7}
@@ -284,8 +286,13 @@ export default function MeasurementScreen({ route, navigation }) {
     if (isSaving) return;
     setIsSaving(true);
     try {
+      let savedPhotoObj = null;
+
       if (photoId) {
-        const updatedPhoto = await localDB.updatePhotoMarkers(itemId, photoId, markers);
+
+        const updatedPhoto = await localDB.updatePhotoMarkers(visitId, photoId, markers);
+        savedPhotoObj = updatedPhoto;
+
         const serverId = updatedPhoto?._serverId || (String(photoId).startsWith('local_') ? null : photoId);
         if (serverId) {
           try {
@@ -297,67 +304,93 @@ export default function MeasurementScreen({ route, navigation }) {
             }
           } catch (e) {}
         }
-        navigation.goBack();
-        return;
-      }
+      } else {
 
-      const permanentUri = await saveAndCompressImage(photo);
-      
-      const newPhoto = await localDB.createPhoto(itemId, {
-        localFileUri: permanentUri,
-        markers: markers,
-        item_id: itemId,
-      }, true);
+        const permanentUri = await saveAndCompressImage(photo);
 
-      const folderServerId = String(itemId).startsWith('local_') ? null : itemId;
+        const newPhoto = await localDB.createPhoto(visitId, {
+          localFileUri: permanentUri,
+          markers: markers,
+          observations: [],
+        }, true);
 
-      if (folderServerId) {
-        let uploadSuccess = false;
-        let serverPhotoData = null;
+        savedPhotoObj = newPhoto;
 
-        try {
-          const formData = new FormData();
-          formData.append('photo', { uri: permanentUri, type: 'image/jpeg', name: 'photo.jpg' });
-          formData.append('item_id', folderServerId);
-          if (markers.length > 0) formData.append('markers', JSON.stringify(markers));
-          const res = await api.post('/photos', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-          if (res.data?.id) {
-            uploadSuccess = true;
-            serverPhotoData = res.data;
+        const visitServerId = String(visitId).startsWith('local_') ? null : visitId;
+
+        if (visitServerId) {
+          let uploadSuccess = false;
+          let serverPhotoData = null;
+
+          try {
+            const formData = new FormData();
+            formData.append('photo', { uri: permanentUri, type: 'image/jpeg', name: 'photo.jpg' });
+            formData.append('visit_id', visitServerId);
+            if (markers.length > 0) formData.append('markers', JSON.stringify(markers));
+            const res = await api.post('/photos', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+            if (res.data?.id) {
+              uploadSuccess = true;
+              serverPhotoData = res.data;
+            }
+          } catch (e) {
+            await localDB.addToSyncQueue({
+              type: 'CREATE', entity: 'photo',
+              localId: newPhoto.id, visitLocalId: visitId,
+              data: { localFileUri: permanentUri, markers, visit_id: visitServerId }
+            });
           }
-        } catch (e) {
+
+          if (uploadSuccess && serverPhotoData) {
+            try {
+              const photos = await localDB.getPhotos(visitId);
+              const updatedList = photos.map(p => p.id === newPhoto.id 
+                ? { ...p, id: serverPhotoData.id, _serverId: serverPhotoData.id, _isLocal: false }
+                : p
+              );
+              await localDB.setPhotos(visitId, updatedList);
+              savedPhotoObj = updatedList.find(p => p._serverId === serverPhotoData.id);
+              try {
+                await removeImage(permanentUri);
+              } catch {}
+            } catch {}
+          }
+        } else {
           await localDB.addToSyncQueue({
             type: 'CREATE', entity: 'photo',
-            localId: newPhoto.id, itemLocalId: itemId,
-            data: { localFileUri: permanentUri, markers, item_id: folderServerId }
+            localId: newPhoto.id, visitLocalId: visitId,
+            data: { localFileUri: permanentUri, markers, visit_id: visitId }
           });
         }
-
-        if (uploadSuccess && serverPhotoData) {
-          try {
-            const photos = await localDB.getPhotos(itemId);
-            await localDB.setPhotos(itemId, photos.filter(p => p.id !== newPhoto.id));
-            try {
-              await removeImage(permanentUri);
-            } catch {}
-          } catch {}
-        }
-      } else {
-        await localDB.addToSyncQueue({
-          type: 'CREATE', entity: 'photo',
-          localId: newPhoto.id, itemLocalId: itemId,
-          data: { localFileUri: permanentUri, markers, item_id: itemId }
-        });
       }
 
-      navigation.goBack();
+      setIsSaving(false);
+
+      Alert.alert(
+        'Observações',
+        'Deseja adicionar observações a esta foto?',
+        [
+          {
+            text: 'Não',
+            onPress: () => navigation.goBack()
+          },
+          {
+            text: 'Sim',
+            onPress: () => {
+              navigation.replace('PhotoObservations', { 
+                photoId: savedPhotoObj.id, 
+                visitId: visitId 
+              });
+            }
+          }
+        ],
+        { cancelable: false }
+      );
+
     } catch (error) {
       setIsSaving(false);
-      alert(`Erro ao salvar foto: ${error.message}`);
+      Alert.alert('Erro', `Erro ao salvar foto: ${error.message}`);
     }
   };
-
-
 
   if (photo) {
     return (
@@ -370,37 +403,42 @@ export default function MeasurementScreen({ route, navigation }) {
           onPress={() => navigation.goBack()}
           style={[styles.backButton, { top: Math.max(insets.top, 16) }]}
         />
+        <View 
+          pointerEvents="none" 
+          style={[styles.instructionBanner, { top: Math.max(insets.top, 16) + 4 }]}
+        >
+          <Text style={styles.instructionText}>
+            {step === 1 ? '1. Toque no ponto inicial' : '2. Toque no ponto final da reta'}
+          </Text>
+        </View>
         <View style={styles.previewContainer}>
           <TouchableOpacity 
             activeOpacity={1} 
             onPress={handleImageTap} 
             style={[styles.imageContainer, { width: containerWidth, height: containerHeight }]}
           >
-            <Image source={{ uri: photo }} style={styles.fullImage} />
-            
-            <View style={styles.instructionBanner}>
-              <Text style={styles.instructionText}>
-                {step === 1 ? '1. Toque no ponto inicial' : '2. Toque no ponto final da reta'}
-              </Text>
-            </View>
+            <Image source={{ uri: photo }} style={styles.fullImage} resizeMode="cover" />
 
-            {markers.map(marker => renderLine(marker.start, marker.end, marker.value, marker.id))}
-            
+            {markers.map(marker => renderLine(marker.start, marker.end, marker.value, marker.id, marker.canvasWidth, marker.canvasHeight))}
+
             {tempPointA && !lastTap && (
-              <View style={[styles.point, { left: tempPointA.x - 6, top: tempPointA.y - 6 }]} />
+              <View pointerEvents="none" style={[styles.point, { left: tempPointA.x - 6, top: tempPointA.y - 6 }]} />
             )}
             {tempPointA && lastTap && renderLine(tempPointA, lastTap, '', 'temp')}
 
           </TouchableOpacity>
         </View>
 
-        <View style={isLandscape ? styles.controlsLandscape : [styles.controls, { paddingBottom: insets.bottom + 20 }]}>
+        <View 
+          pointerEvents={isLandscape ? "box-none" : "auto"}
+          style={isLandscape ? styles.controlsLandscape : [styles.controls, { paddingBottom: insets.bottom + 20 }]}
+        >
           <Button 
             mode="outlined" 
             onPress={handleRetake}
             textColor={isLandscape ? "white" : undefined}
-            style={isLandscape ? [styles.buttonLandscape, { borderColor: 'white', backgroundColor: 'rgba(0,0,0,0.5)' }] : null}
-            labelStyle={isLandscape ? styles.buttonLabelLandscape : null}
+            style={isLandscape ? [styles.buttonLandscape, { borderColor: 'white', backgroundColor: 'rgba(0,0,0,0.5)' }] : {}}
+            labelStyle={isLandscape ? styles.buttonLabelLandscape : {}}
           >
             Tirar Outra
           </Button>
@@ -410,33 +448,34 @@ export default function MeasurementScreen({ route, navigation }) {
             disabled={isSaving}
             loading={isSaving}
             style={[
-              { backgroundColor: theme.colors.accent },
-              isLandscape ? styles.buttonLandscape : null
+              { backgroundColor: theme.colors.primary },
+              isLandscape ? styles.buttonLandscape : {}
             ]}
-            labelStyle={isLandscape ? styles.buttonLabelLandscape : null}
+            labelStyle={isLandscape ? styles.buttonLabelLandscape : {}}
           >
-            Salvar Item
+            Salvar Foto
           </Button>
         </View>
 
+        {}
         <Portal>
           <Modal visible={modalVisible} onDismiss={cancelMarker} contentContainerStyle={styles.modal}>
             <Text style={tokens.typography.h2}>Adicionar Medida</Text>
             <TextInput
-              label="Valor (ex: 120cm)"
+              label="Valor (ex: 2,45m ou 120cm)"
               value={currentValue}
               onChangeText={setCurrentValue}
               mode="outlined"
               style={styles.input}
               autoFocus
             />
-            <Button mode="contained" onPress={addMarker} style={styles.button}>Confirmar</Button>
+            <Button mode="contained" onPress={addMarker} disabled={!currentValue.trim()} style={styles.button}>Confirmar</Button>
           </Modal>
 
           <Modal visible={editModalVisible} onDismiss={cancelEditMarker} contentContainerStyle={styles.modal}>
             <Text style={tokens.typography.h2}>Editar Medida</Text>
             <TextInput
-              label="Valor (ex: 120cm)"
+              label="Valor (ex: 2,45m ou 120cm)"
               value={editValue}
               onChangeText={setEditValue}
               mode="outlined"
@@ -444,7 +483,7 @@ export default function MeasurementScreen({ route, navigation }) {
               autoFocus
             />
             <View style={styles.modalButtonsRow}>
-              <Button mode="contained" onPress={saveEditedMarker} style={[styles.button, { flex: 1, marginRight: 8 }]}>Salvar</Button>
+              <Button mode="contained" onPress={saveEditedMarker} disabled={!editValue.trim()} style={[styles.button, { flex: 1, marginRight: 8 }]}>Salvar</Button>
               <Button mode="outlined" onPress={deleteMarker} labelStyle={{ color: 'red' }} style={{ borderColor: 'red', flex: 1 }}>Excluir</Button>
             </View>
             <Button mode="text" onPress={cancelEditMarker} style={{ marginTop: 10 }}>Cancelar</Button>
@@ -481,6 +520,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'black',
+  },
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   camera: {
     flex: 1,
@@ -524,12 +567,12 @@ const styles = StyleSheet.create({
   },
   instructionBanner: {
     position: 'absolute',
-    top: 40,
-    alignSelf: 'center',
+    left: 80,
     backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
+    zIndex: 999,
   },
   instructionText: {
     color: 'white',
@@ -541,7 +584,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: theme.colors.accent,
+    backgroundColor: '#00E676',
     borderWidth: 2,
     borderColor: 'white',
     elevation: 4,
@@ -553,12 +596,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   labelContainer: {
-    backgroundColor: 'rgba(33, 43, 54, 0.9)',
+    backgroundColor: 'rgba(22, 29, 100, 0.95)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    borderWidth: 1,
-    borderColor: theme.colors.accent,
+    borderWidth: 1.5,
+    borderColor: '#00E676',
   },
   labelText: {
     color: 'white',
@@ -572,7 +615,7 @@ const styles = StyleSheet.create({
     padding: 20,
     flexDirection: 'row',
     justifyContent: 'space-around',
-    backgroundColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: 'rgba(255,255,255,0.85)',
   },
   controlsLandscape: {
     position: 'absolute',
@@ -593,9 +636,10 @@ const styles = StyleSheet.create({
   },
   modal: {
     backgroundColor: 'white',
-    padding: 20,
+    padding: 24,
     margin: 20,
-    borderRadius: 12,
+    borderRadius: theme.roundness * 2,
+    ...tokens.shadows.medium,
   },
   input: {
     marginVertical: 15,
