@@ -38,7 +38,25 @@ export default function MeasurementScreen({ route, navigation }) {
 
   const [isSaving, setIsSaving] = useState(false);
 
-  const { width, height } = useWindowDimensions();
+  const { width: currentWidth, height: currentHeight } = useWindowDimensions();
+  const [layoutDims, setLayoutDims] = useState({ width: currentWidth, height: currentHeight });
+
+  useEffect(() => {
+    setLayoutDims(prev => {
+      // Check if it is an orientation change (width and height swap roughly)
+      const isOrientationChange = Math.abs(currentWidth - prev.height) < 50 && Math.abs(currentHeight - prev.width) < 50;
+      // Check if height has increased (keyboard closed or full size restored)
+      const isIncrease = currentHeight > prev.height;
+      
+      if (isOrientationChange || isIncrease || prev.height === 0 || prev.width === 0) {
+        return { width: currentWidth, height: currentHeight };
+      }
+      // If height decreases (likely due to keyboard opening) and width is unchanged, ignore the shrink
+      return prev;
+    });
+  }, [currentWidth, currentHeight]);
+
+  const { width, height } = layoutDims;
   const isLandscape = width > height;
 
   let containerWidth = width;

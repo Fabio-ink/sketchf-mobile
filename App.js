@@ -1,7 +1,18 @@
 import React, { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StatusBar, Platform, View } from 'react-native';
+import { StatusBar, Platform, View, Alert } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import { CustomAlertProvider, CustomAlert } from './src/components/CustomAlert';
+
+// Override native Alert.alert globally with our custom styled version
+const originalAlert = Alert.alert;
+Alert.alert = (title, message, buttons, options) => {
+  if (CustomAlert.isReady()) {
+    CustomAlert.alert(title, message, buttons, options);
+  } else {
+    originalAlert(title, message, buttons, options);
+  }
+};
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Provider as PaperProvider, IconButton } from 'react-native-paper';
@@ -158,8 +169,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <PaperProvider theme={theme}>
-        <StatusBar hidden={true} />
-        <NavigationContainer>
+        <CustomAlertProvider>
+          <StatusBar hidden={true} />
+          <NavigationContainer>
         <Stack.Navigator 
           initialRouteName="Login"
           screenOptions={{
@@ -219,6 +231,7 @@ export default function App() {
           />
         </Stack.Navigator>
         </NavigationContainer>
+        </CustomAlertProvider>
       </PaperProvider>
     </SafeAreaProvider>
   );
