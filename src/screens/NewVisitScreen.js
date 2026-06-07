@@ -464,26 +464,63 @@ export default function NewVisitScreen({ route, navigation }) {
   };
 
   const renderProgressBar = () => {
-    const stepsText = ['Cliente', 'Ambiente', 'Fotos', 'Resumo'];
+    const steps = [
+      { label: 'Cliente', icon: 'account' },
+      { label: 'Ambiente', icon: 'sofa' },
+      { label: 'Fotos', icon: 'camera' },
+      { label: 'Resumo', icon: 'check-bold' }
+    ];
     return (
-      <View style={styles.progressBar}>
-        {stepsText.map((t, idx) => {
-          const isDone = idx + 1 < step;
-          const isCurrent = idx + 1 === step;
-          return (
-            <View key={t} style={styles.progressStep}>
-              <View style={[
-                styles.progressDot, 
-                isDone && styles.progressDotDone,
-                isCurrent && styles.progressDotCurrent
-              ]} />
-              <Text style={[
-                styles.progressText,
-                isCurrent && styles.progressTextCurrent
-              ]}>{t}</Text>
-            </View>
-          );
-        })}
+      <View style={[styles.progressBarContainer, { paddingTop: insets.top + tokens.spacing.md }]}>
+        <View style={styles.progressBarWrapper}>
+          <View style={styles.connectingLineContainer}>
+            <View style={styles.connectingLineGray} />
+            <View 
+              style={[
+                styles.connectingLineActive, 
+                { width: `${((step - 1) / (steps.length - 1)) * 100}%` }
+              ]} 
+            />
+          </View>
+          {steps.map((s, idx) => {
+            const isDone = idx + 1 < step;
+            const isCurrent = idx + 1 === step;
+            const isPending = idx + 1 > step;
+            return (
+              <View key={s.label} style={styles.stepWrapper}>
+                <View 
+                  pointerEvents="none"
+                  style={[
+                    styles.iconCircle,
+                    isDone && styles.iconCircleDone,
+                    isCurrent && styles.iconCircleCurrent,
+                    isPending && styles.iconCirclePending
+                  ]}
+                >
+                  <IconButton
+                    icon={s.icon}
+                    iconColor={
+                      isDone || isCurrent 
+                        ? '#FFFFFF' 
+                        : theme.colors.placeholder
+                    }
+                    size={20}
+                    style={styles.stepIcon}
+                  />
+                </View>
+                <Text 
+                  style={[
+                    styles.stepLabel,
+                    isCurrent && styles.stepLabelCurrent,
+                    isDone && styles.stepLabelDone
+                  ]}
+                >
+                  {s.label}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
       </View>
     );
   };
@@ -798,16 +835,12 @@ export default function NewVisitScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      {}
+      {renderProgressBar()}
       {step === 1 && renderStepClient()}
       {step === 2 && renderStepEnvironment()}
       {step === 3 && renderStepPhotos()}
       {step === 4 && renderStepSummary()}
 
-      {}
-      {renderProgressBar()}
-
-      {}
       <RNModal
         visible={viewerVisible}
         transparent={true}
@@ -958,7 +991,7 @@ const styles = StyleSheet.create({
   },
   stepContainer: {
     flex: 1,
-    paddingBottom: 80, 
+    paddingBottom: tokens.spacing.md,
   },
   header: {
     padding: tokens.spacing.lg,
@@ -1178,44 +1211,85 @@ const styles = StyleSheet.create({
   summaryActionBtn: {
     width: '100%',
   },
-  progressBar: {
+  progressBarContainer: {
+    backgroundColor: theme.colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    paddingBottom: tokens.spacing.md,
+    alignItems: 'center',
+  },
+  progressBarWrapper: {
+    flexDirection: 'row',
+    width: '90%',
+    justifyContent: 'space-between',
+    position: 'relative',
+    alignItems: 'flex-start',
+    marginTop: tokens.spacing.sm,
+  },
+  connectingLineContainer: {
     position: 'absolute',
-    bottom: 0,
+    top: 20,
+    left: 35,
+    right: 35,
+    height: 3,
+  },
+  connectingLineGray: {
+    position: 'absolute',
     left: 0,
     right: 0,
-    height: 60,
-    backgroundColor: theme.colors.surface,
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'space-around',
+    top: 0,
+    bottom: 0,
+    backgroundColor: theme.colors.border,
+    borderRadius: 2,
   },
-  progressStep: {
-    alignItems: 'center',
-  },
-  progressDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.colors.placeholder,
-  },
-  progressDotDone: {
-    backgroundColor: theme.colors.secondary,
-  },
-  progressDotCurrent: {
+  connectingLineActive: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
     backgroundColor: theme.colors.primary,
-    transform: [{ scale: 1.4 }],
+    borderRadius: 2,
   },
-  progressText: {
-    fontSize: 10,
+  stepWrapper: {
+    alignItems: 'center',
+    width: 70,
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  iconCircleDone: {
+    backgroundColor: theme.colors.primary,
+  },
+  iconCircleCurrent: {
+    backgroundColor: theme.colors.primary,
+  },
+  iconCirclePending: {
+    backgroundColor: '#F8F9FD',
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+  },
+  stepIcon: {
+    margin: 0,
+    padding: 0,
+  },
+  stepLabel: {
+    fontSize: 11,
     color: theme.colors.placeholder,
-    marginTop: 4,
+    marginTop: 6,
     fontWeight: '600',
+    textAlign: 'center',
   },
-  progressTextCurrent: {
+  stepLabelCurrent: {
     color: theme.colors.primary,
     fontWeight: '700',
+  },
+  stepLabelDone: {
+    color: theme.colors.primary,
   },
   modal: {
     backgroundColor: 'white',
