@@ -25,6 +25,7 @@ import api from './src/services/api';
 import * as NavigationBar from 'expo-navigation-bar';
 
 import LoginScreen from './src/screens/LoginScreen';
+import ForgotPasswordScreen from './src/screens/ForgotPasswordScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
 import VisitsScreen from './src/screens/VisitsScreen';
 import ClientsScreen from './src/screens/ClientsScreen';
@@ -192,6 +193,11 @@ export default function App() {
           <Stack.Screen 
             name="Login" 
             component={LoginScreen} 
+            options={{ headerShown: false }} 
+          />
+          <Stack.Screen 
+            name="ForgotPassword" 
+            component={ForgotPasswordScreen} 
             options={{ headerShown: false }} 
           />
           <Stack.Screen 

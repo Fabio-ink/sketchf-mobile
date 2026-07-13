@@ -100,7 +100,7 @@ export default function LoginScreen({ navigation }) {
           {!isRegistering && (
             <Button 
               mode="text" 
-              onPress={() => {}}
+              onPress={() => navigation.navigate('ForgotPassword')}
               style={styles.secondaryButton}
               labelStyle={{ color: theme.colors.accent }}
             >
