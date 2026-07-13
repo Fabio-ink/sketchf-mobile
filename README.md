@@ -9,7 +9,7 @@ Built with the constraints of connectivity-poor construction sites in mind, Sket
 ## Download App
 You can download the latest production release of the application directly as an APK for Android devices:
 
-* **[Download SketchF APK (Android)](https://expo.dev/accounts/fluxyfp/projects/sketchf/builds/4478e5f8-7d24-49aa-91ff-b63313d56ee9)**
+* **[Download SketchF APK (Android)](https://expo.dev/accounts/fluxyfp/projects/sketchf/builds/6e5c1602-a7c7-4fb9-b70c-67725fd83cf1)**
 
 ---
 
