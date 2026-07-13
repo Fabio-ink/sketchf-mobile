@@ -12,6 +12,8 @@ CREATE TABLE users (
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     active CHAR(1) DEFAULT 'A' CHECK (active IN ('A', 'I')),
+    reset_token VARCHAR(255),
+    reset_token_expires TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
