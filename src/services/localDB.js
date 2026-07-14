@@ -362,16 +362,38 @@ export const mergeServerClients = async (serverClients) => {
 
 export const mergeServerVisits = async (serverVisits) => {
   const localVisits = await getVisits();
+  const queue = await getSyncQueue();
+  const pendingUpdates = queue
+    .filter(op => op.entity === 'visit' && op.type === 'UPDATE')
+    .map(op => op.localId.toString());
+
   const localOnly = localVisits.filter(v => v._isLocal);
-  const serverMapped = serverVisits.map(sv => ({ 
-    ...sv, 
-    _serverId: sv.id, 
-    _isLocal: false,
-    client_id: sv.client_id,
-    client_name: sv.client_name,
-    client_phone: sv.client_phone,
-    client_address: sv.client_address
-  }));
+  
+  const serverMapped = serverVisits.map(sv => {
+    const localVisit = localVisits.find(v => v.id.toString() === sv.id.toString());
+    // Se a visita local possui modificações pendentes no sync queue, preserva os dados locais
+    if (localVisit && pendingUpdates.includes(sv.id.toString())) {
+      return { 
+        ...sv, 
+        _serverId: sv.id, 
+        status: localVisit.status,
+        environment: localVisit.environment,
+        observations: localVisit.observations,
+        date: localVisit.date,
+        _isLocal: false 
+      };
+    }
+    return { 
+      ...sv, 
+      _serverId: sv.id, 
+      _isLocal: false,
+      client_id: sv.client_id,
+      client_name: sv.client_name,
+      client_phone: sv.client_phone,
+      client_address: sv.client_address
+    };
+  });
+  
   const merged = [...localOnly, ...serverMapped];
   await write(KEYS.VISITS, merged);
   return merged;

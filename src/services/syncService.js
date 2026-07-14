@@ -71,8 +71,7 @@ export const syncToServer = async (api) => {
 
         else if (op.type === 'CREATE' && op.entity === 'visit') {
           let clientServerId = idMap[op.clientLocalId] || op.data.client_id;
-          if (typeof clientServerId === 'string' && clientServerId.startsWith('local_')) {
-
+          if (isNaN(Number(clientServerId))) {
             continue;
           }
 
@@ -120,8 +119,7 @@ export const syncToServer = async (api) => {
 
         else if (op.type === 'CREATE' && op.entity === 'photo') {
           let visitServerId = idMap[op.visitLocalId] || op.data.visit_id;
-          if (typeof visitServerId === 'string' && visitServerId.startsWith('local_')) {
-
+          if (isNaN(Number(visitServerId))) {
             continue;
           }
 

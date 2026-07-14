@@ -72,11 +72,38 @@ exports.updateVisit = async (req, res) => {
   const { id } = req.params;
   const { environment, status, date, observations } = req.body;
   try {
-    const updateDate = date ? new Date(date) : new Date();
-    const result = await db.query(
-      'UPDATE visits SET environment = $1, status = $2, date = $3, observations = $4 WHERE id = $5 AND user_id = $6 RETURNING *',
-      [environment, status, updateDate, observations, id, req.userId]
-    );
+    const updates = [];
+    const params = [];
+
+    if (environment !== undefined) {
+      params.push(environment);
+      updates.push(`environment = $${params.length}`);
+    }
+    if (status !== undefined) {
+      params.push(status);
+      updates.push(`status = $${params.length}`);
+    }
+    if (date !== undefined) {
+      params.push(new Date(date));
+      updates.push(`date = $${params.length}`);
+    }
+    if (observations !== undefined) {
+      params.push(observations);
+      updates.push(`observations = $${params.length}`);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).send({ error: 'No fields to update' });
+    }
+
+    params.push(id);
+    const idParamIndex = params.length;
+    params.push(req.userId);
+    const userIdParamIndex = params.length;
+
+    const query = `UPDATE visits SET ${updates.join(', ')} WHERE id = $${idParamIndex} AND user_id = $${userIdParamIndex} RETURNING *`;
+    
+    const result = await db.query(query, params);
     if (result.rows.length === 0) {
       return res.status(404).send({ error: 'Visit not found or not authorized' });
     }
@@ -93,7 +120,8 @@ exports.updateVisit = async (req, res) => {
     );
     res.send(finalResult.rows[0]);
   } catch (error) {
-    res.status(500).send(error);
+    console.error('Error updating visit:', error);
+    res.status(500).send({ error: error.message || error });
   }
 };
 
