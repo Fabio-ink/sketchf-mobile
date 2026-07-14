@@ -1,30 +1,76 @@
+const https = require('https');
 const nodemailer = require('nodemailer');
 
-// Configura o transporte para o relay SMTP do Brevo
-const transporter = nodemailer.createTransport({
-  host: 'smtp-relay.brevo.com',
-  port: 587,
-  secure: false, // false para usar TLS na porta 587
-  auth: {
-    user: process.env.BREVO_SMTP_USER || process.env.BREVO_SENDER_EMAIL,
-    pass: process.env.BREVO_API_KEY,
-  },
-});
+/**
+ * Envia e-mail via API REST da Brevo (HTTPS - Porta 443)
+ */
+function sendEmailViaRest({ to, subject, htmlContent }) {
+  return new Promise((resolve, reject) => {
+    const apiKey = process.env.BREVO_API_KEY;
+    const senderEmail = process.env.BREVO_SENDER_EMAIL;
+    const senderName = process.env.BREVO_SENDER_NAME || 'SketchF';
+
+    const data = JSON.stringify({
+      sender: {
+        name: senderName,
+        email: senderEmail,
+      },
+      to: [{ email: to }],
+      subject: subject,
+      htmlContent: htmlContent,
+    });
+
+    const options = {
+      hostname: 'api.brevo.com',
+      port: 443,
+      path: '/v3/smtp/email',
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': apiKey,
+        'content-type': 'application/json',
+        'content-length': Buffer.byteLength(data),
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => body += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            resolve(JSON.parse(body));
+          } catch (e) {
+            resolve({ message: 'Success' });
+          }
+        } else {
+          reject(new Error(`Brevo REST API error: ${res.statusCode} - ${body}`));
+        }
+      });
+    });
+
+    req.on('error', (error) => reject(error));
+    req.write(data);
+    req.end();
+  });
+}
 
 /**
- * Envia um e-mail transacional via Brevo SMTP
- * @param {Object} params
- * @param {string} params.to - E-mail do destinatário
- * @param {string} params.subject - Assunto do e-mail
- * @param {string} params.htmlContent - Conteúdo HTML
+ * Envia e-mail via SMTP (Nodemailer)
  */
-function sendEmail({ to, subject, htmlContent }) {
+function sendEmailViaSmtp({ to, subject, htmlContent }) {
+  const transporter = nodemailer.createTransport({
+    host: 'smtp-relay.brevo.com',
+    port: 587,
+    secure: false,
+    auth: {
+      user: process.env.BREVO_SMTP_USER || process.env.BREVO_SENDER_EMAIL,
+      pass: process.env.BREVO_API_KEY,
+    },
+  });
+
   const senderEmail = process.env.BREVO_SENDER_EMAIL;
   const senderName = process.env.BREVO_SENDER_NAME || 'SketchF';
-
-  if (!senderEmail || !process.env.BREVO_API_KEY) {
-    return Promise.reject(new Error('Brevo credentials (BREVO_API_KEY, BREVO_SENDER_EMAIL) are missing in environment variables.'));
-  }
 
   const mailOptions = {
     from: `"${senderName}" <${senderEmail}>`,
@@ -37,9 +83,29 @@ function sendEmail({ to, subject, htmlContent }) {
 }
 
 /**
+ * Envia um e-mail transacional detectando automaticamente se deve usar API REST ou SMTP
+ */
+function sendEmail({ to, subject, htmlContent }) {
+  const apiKey = process.env.BREVO_API_KEY;
+  const senderEmail = process.env.BREVO_SENDER_EMAIL;
+
+  if (!apiKey || !senderEmail) {
+    return Promise.reject(new Error('Brevo credentials (BREVO_API_KEY, BREVO_SENDER_EMAIL) are missing.'));
+  }
+
+  // Se a chave for de API REST (começa com xkeysib-)
+  if (apiKey.startsWith('xkeysib-')) {
+    console.log('[EmailService] Usando API REST (HTTPS) para envio do e-mail.');
+    return sendEmailViaRest({ to, subject, htmlContent });
+  } 
+  
+  // Se for SMTP (começa com xsmtpsib-)
+  console.log('[EmailService] Usando SMTP Relay (Nodemailer) para envio do e-mail.');
+  return sendEmailViaSmtp({ to, subject, htmlContent });
+}
+
+/**
  * Envia um e-mail de recuperação contendo o código de 6 dígitos.
- * @param {string} email - E-mail do destinatário
- * @param {string} code - Código de redefinição de 6 dígitos
  */
 function sendPasswordResetEmail(email, code) {
   const htmlContent = `
